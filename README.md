@@ -84,9 +84,9 @@ No hallucinated evidence can pass validation.
 1. Create environment
 
 git clone https://github.com/manasmannu/Agentic-RAG-FOMC.git
-cd agentic-rag-fomc
 
 ```bash
+cd agentic-rag-fomc
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -135,10 +135,11 @@ python -m src.ingest.build_index
 You should now have:
 
 index/
-chunks.parquet
-embeddings.npy
-faiss_hnsw_ip.index
-faiss_ivf_ip.index
+
+- chunks.parquet
+- embeddings.npy
+- faiss_hnsw_ip.index
+- faiss_ivf_ip.index
 
 ⸻
 
