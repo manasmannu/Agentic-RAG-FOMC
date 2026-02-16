@@ -1,0 +1,43 @@
+.venv/
+.env
+
+Logs
+index/
+data/raw/
+data/cleaned/
+*.parquet
+*.npy
+*.index
+.DS_Store
+
+pycache/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+OS / Editor
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.ipynb_checkpoints/
+
+Pytest / coverage
+
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+Model downloads / cache
+
+.cache/
