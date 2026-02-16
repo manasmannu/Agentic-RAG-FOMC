@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any, Dict, List, Literal, Tuple
-
 from src.agent.llm_openai import DEFAULT_MODEL, llm_json
 from src.agent.mcp_tools import MCPRAGClient, RetrievedChunk
 
@@ -64,7 +63,7 @@ SYSTEM_PLAN = """You are a RAG agent planner for FOMC documents (minutes + press
 Decide if retrieval is needed. If the user asks about FOMC content, retrieval is needed.
 Return a search_query optimized for semantic retrieval (keywords, remove fluff).
 For analytical questions, include synonyms like ‘eased’, ‘decline’, ‘softening’, ‘inflation expectations’, ‘core inflation’, ‘price pressures’ in the search query.
-Use top_k 6 by default; use 8–10 only for synthesis/why/risk questions
+Use top_k 6 by default; use 8–10 only for synthesis/why/risk questions.
 Choose index_type: "hnsw" for best recall; "ivf" only if asked to compare IVF or memory/scale topics.
 """
 
@@ -79,7 +78,7 @@ If you cannot support an answer with retrieved evidence, do not attempt to fabri
 
 def build_context(chunks: List[RetrievedChunk]) -> str:
     max_chars_per_chunk = 1200  # keeps prompts smaller + cheaper
-    lines = []
+    lines: List[str] = []
     for c in chunks:
         snippet = c.text[:max_chars_per_chunk]
         lines.append(
@@ -103,7 +102,8 @@ def detect_information_intent(question: str) -> str:
 
 def rerank_by_intent(intent: str, retrieved: List[RetrievedChunk]) -> List[RetrievedChunk]:
     """
-    Reorder retrieved evidence based on question intent. This does NOT change what was retrieved; it only changes ordering.
+    Reorder retrieved evidence based on question intent.
+    NOTE: This does NOT change retrieval set; it only changes ordering for the answer prompt.
     """
     if intent in ("analysis", "general"):
         # analyst-style reasoning/synthesis: minutes usually carry the "why"
@@ -147,35 +147,76 @@ async def answer_question(
     debug: bool = False,
 ) -> Dict[str, Any]:
 
-    # 1) Plan
-    plan = llm_json(model=model, system=SYSTEM_PLAN, user=f"User question: {question}\nDefault index_type requested by caller: {index_type}", schema_wrapper=PLAN_SCHEMA)
+    intent = detect_information_intent(question)
+
+
+    # Plan (LLM decides if retrieval is needed + builds retrieval query)
+    plan = llm_json(
+        model=model,
+        system=SYSTEM_PLAN,
+        user=f"User question: {question}\nDefault index_type requested by caller: {index_type}",
+        schema_wrapper=PLAN_SCHEMA,
+    )
 
     needs = bool(plan["needs_retrieval"])
     search_query = plan["search_query"].strip() or question
-    top_k = int(plan["top_k"] or top_k_default)
+    top_k = int(plan.get("top_k") or top_k_default)
     chosen_index = plan["index_type"] if plan["index_type"] in ("hnsw", "ivf") else index_type
 
     retrieved: List[RetrievedChunk] = []
 
-    # Compute intent ONCE (used for both top_k adjustment and reranking)
-    intent = detect_information_intent(question)
 
+    # Retrieval (only if planner says so)
     if needs:
         top_k = adjust_top_k_for_intent(intent, top_k)
 
         async with MCPRAGClient(mcp_server_cmd) as mcp:
-            retrieved = await mcp.search(
-                search_query,
-                top_k=top_k,
-                index_type=chosen_index,
-                hnsw_ef_search=hnsw_ef_search,
-                ivf_nprobe=ivf_nprobe,
-            )
+            retrieved = await mcp.search(search_query, top_k=top_k, index_type=chosen_index, hnsw_ef_search=hnsw_ef_search, ivf_nprobe=ivf_nprobe)
 
         retrieved = rerank_by_intent(intent, retrieved)
 
-    # 2) Answer (grounded)
-    context = build_context(retrieved) if retrieved else "NO_RETRIEVED_PASSAGES"
+
+    # If retrieval wasn't needed OR we retrieved nothing, do NOT call the answer LLM.
+    # If retrieval wasn't needed, treat as out-of-scope.
+    if not needs:
+        out: Dict[str, Any] = {
+            "final_answer": (
+                "I can only answer questions grounded in FOMC minutes and press statements. "
+                "Your question appears outside that document set."
+            ),
+            "citations": [],
+            "confidence": "low",
+            "uncertainty": {
+                "is_uncertain": True,
+                "missing_information": ["This assistant only supports questions about FOMC minutes/statements"],
+                "suggested_next_queries": [],
+            },
+        }
+        if debug:
+            out["_debug"] = {"plan": plan, "intent": intent, "retrieved": []}
+        return out
+
+    # Retrieval was intended but returned nothing — in-scope but no evidence.
+    if not retrieved:
+        out: Dict[str, Any] = {
+            "final_answer": (
+                "I couldn’t find relevant evidence in the retrieved FOMC passages to answer that question."
+            ),
+            "citations": [],
+            "confidence": "low",
+            "uncertainty": {
+                "is_uncertain": True,
+                "missing_information": ["Relevant FOMC evidence for this question was not retrieved"],
+                "suggested_next_queries": [],
+            },
+        }
+        if debug:
+            out["_debug"] = {"plan": plan, "intent": intent, "retrieved": []}
+        return out
+
+
+    # Answer (grounded) — only when we have evidence
+    context = build_context(retrieved)
     user_prompt = f"""Question:
 {question}
 
@@ -186,7 +227,8 @@ Return JSON only, following the schema.
 """
     out = llm_json(model=model, system=SYSTEM_ANSWER, user=user_prompt, schema_wrapper=ANSWER_SCHEMA)
 
-    # 3) Validate citations
+
+    # Validate citations (hard guardrail)
     ok, problems = validate_citations(out, retrieved)
     if not ok:
         out["final_answer"] = (
