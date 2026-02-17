@@ -79,6 +79,11 @@ No hallucinated evidence can pass validation.
           build_index.py          # Build indexes
           benchmark.py            # benchmark script (your snippet)
 
+## Demo
+https://github.com/user-attachments/assets/f1cf15e5-359c-4109-a013-c5c88bd025ad
+
+
+
 ## Setup
 
 1. Create environment
