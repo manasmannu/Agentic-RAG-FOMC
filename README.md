@@ -269,6 +269,34 @@ This guarantees factual grounding.
 
 ⸻
 
+## LLM
+OpenAI chat model (via API) for the agent reasoning steps:
+- Planner — decides whether retrieval is needed and constructs the search query
+- Answerer — produces a grounded response strictly from retrieved passages
+
+The model is not used as a knowledge source.
+It only performs reasoning over retrieved evidence, ensuring answers come from FOMC documents rather than model memory.
+
+⸻
+
+## Framework Server
+FastMCP
+
+FastMCP provides a structured tool-calling interface between the LLM agent and external systems.
+Instead of allowing the model to directly access the vector database, the agent communicates with a small MCP tool server using a standardized protocol.
+
+This separates reasoning from execution and makes the system safer and more production-like:
+- The model decides what to do
+- The server performs the action
+
+Conceptual analogy
+- Agent → brain (reasoning & planning)
+- FastMCP → communication layer (how the brain talks to tools)
+- MCP server → hands (executes retrieval)
+- FAISS → memory/storage (vector database)
+
+⸻
+
 ## HNSW vs IVF (Understanding)
 
 HNSW
