@@ -97,11 +97,14 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+
 2. Configure API key
-
-Create .env
-
-OPENAI_API_KEY=your_key_here
+- Create an OpenAI API key: https://platform.openai.com/api-keys
+- Add the key to a '.env' file in the project root (agentic-rag-fomc directory):
+```bash
+OPENAI_API_KEY=<your_key_here>
+```
+- The project requires OpenAI usage credits. If your free trial quota is exhausted, you may need to purchase a minimum of $5 in API credits to run the system.
 
 ⸻
 
