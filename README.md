@@ -134,7 +134,7 @@ python -m src.ingest.embed
 5. Build FAISS indexes
 
 ```bash
-python -m src.ingest.build_index
+python -m src.vectordb.build_index
 ```
 
 You should now have:
@@ -159,14 +159,14 @@ python -m src.demo.ask "What did the FOMC say about inflation risks?"
 IVF retrieval
 
 ```bash
-python -m src.demo.ask -i ivf "What did the FOMC say about inflation risks?"
+python -m src.demo.ask "What did the FOMC say about inflation risks?" -i ivf
 ```
 
 Debug mode
 Shows planner decisions and retrieved chunks
 
 ```bash
-python -m src.demo.ask -d "Why was inflation considered persistent?"
+python -m src.demo.ask "Why was inflation considered persistent?" -d
 ```
 
 ⸻
@@ -188,21 +188,47 @@ Citations:
 Compares recall vs latency between Flat, HNSW, and IVF.
 
 ```bash
-python -m src.demo.bench_faiss
+python -m src.vectordb.benchmark
 ```
 
 ⸻
 
 ## Design Choices
 
-- Chunking strategy
+## Chunking strategy
   Minutes and statements behave differently:
 
-- Document Strategy Reason
-- Minutes smaller chunks many topics & reasoning chains
-- Statements larger chunks short dense policy text
+- Document | Strategy | Reason
+- Minutes | smaller chunks | many topics & reasoning chains
+- Statements | larger chunks | short dense policy text
 
 Overlap is used to avoid losing meaning across boundaries.
+
+- Why not semantic chunking?
+- This system is designed for evidence-grounded retrieval, not summarization.
+- Semantic chunking tries to group text by meaning, but it introduces two risks for a research assistant:
+1. The boundaries become model-dependent (non-deterministic)
+2. A single chunk may mix multiple claims → weak citations
+
+Instead, we use deterministic paragraph-group chunking with overlap because:
+- Each chunk corresponds to a real passage in the document
+- Citations remain verifiable
+- Retrieval behavior stays stable across re-indexing
+- Analysts can trace the answer back to the source text
+
+
+## Embeddings
+The system uses the following embedding model:
+```bash
+sentence-transformers/all-MiniLM-L6-v2
+```
+Why this model?
+- This project prioritizes retrieval correctness and grounding over generative richness, so the embedding choice was made based on retrieval behavior rather than raw semantic fluency.
+- Fast + lightweight
+	•	~384 dimensional vectors
+	•	Very low latency
+	•	Small memory footprint
+This keeps FAISS search fast and reproducible locally.
 
 ⸻
 
